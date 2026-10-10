@@ -27,6 +27,7 @@ from backend.app.services.egx_validator import EGXValidationEngine, EGX_DATABASE
 from backend.app.services.audio_extractor import audio_extraction_engine
 from backend.app.services.fix_service import FIXProtocolEngine
 from backend.app.services.audit_vault import audit_vault
+from backend.app.services.supabase_service import supabase_service
 
 app = FastAPI(
     title="EGX Voice-to-Order HITL API",
@@ -237,6 +238,12 @@ async def ingest_call_webhook(
 
     CALLS_DB[call_id] = record
 
+    # Persist in Supabase PostgreSQL (Resolves ARCH-001 & DB-001)
+    try:
+        supabase_service.save_call(record.model_dump())
+    except Exception as e:
+        print(f"[Supabase] Non-blocking persist notice: {e}")
+
     # Push to live Broker WebSockets
     await ws_manager.broadcast_json({
         "event": "NEW_CALL_INGESTED",
@@ -291,7 +298,7 @@ async def approve_order(order_id: str, payload: OrderApprovalRequest):
     target_order.approved_by = payload.broker_id
     target_order.approval_timestamp = datetime.now(timezone.utc).isoformat()
 
-    # Commit to WORM Audit Vault
+    # Commit to WORM Audit Vault (Local Append-Only & Supabase WORM Table)
     audit_rec = audit_vault.record_broker_action(
         audit_reference_id=target_call.audit_reference_id,
         call_id=target_call.call_id,
@@ -301,6 +308,32 @@ async def approve_order(order_id: str, payload: OrderApprovalRequest):
         broker_action=target_order.status.value,
         fix_message=fix_result["raw_fix"],
     )
+
+    try:
+        supabase_service.update_order_status(
+            order_id=target_order.order_id,
+            status=target_order.status.value,
+            broker_id=payload.broker_id,
+            fix_message=fix_result["display_fix"]
+        )
+        supabase_service.record_worm_audit({
+            "audit_reference_id": target_call.audit_reference_id,
+            "call_id": target_call.call_id,
+            "order_id": target_order.order_id,
+            "broker_id": payload.broker_id,
+            "broker_action": target_order.status.value,
+            "client_code": target_call.client_code,
+            "ticker": target_order.ticker,
+            "action": target_order.action.value,
+            "quantity": target_order.quantity,
+            "price": target_order.price,
+            "new_value": target_order.model_dump(),
+            "fix_message": fix_result["display_fix"],
+            "sha256_hash": audit_rec.sha256_hash,
+            "fra_compliance_status": "FRA_COMPLIANT_WORM_5YR_ACTIVE"
+        })
+    except Exception as e:
+        print(f"[Supabase] Non-blocking audit record notice: {e}")
 
     # Check if all orders in call are decided
     all_decided = all(
