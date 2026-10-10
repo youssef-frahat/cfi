@@ -90,6 +90,10 @@ REACT_INDEX_HTML = """<!doctype html>
   </body>
 </html>"""
 
+ASSETS_DIR = (app_dir / "assets") if (app_dir / "assets").exists() else (app_dir.parent / "assets")
+if ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="static_assets")
+
 @app.get("/")
 def serve_react_ui():
     index_file = PUBLIC_DIR / "index.html"
