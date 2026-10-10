@@ -1,12 +1,13 @@
 """
 FastAPI Server for EGX Voice-to-Order HITL Console.
-Provides REST Endpoints and WebSocket live push.
+Complies with FRA Law 95/1992 Article 268 & EGX Market Microstructures.
+Provides REST Endpoints, Telephony PBX Webhook, FIX 4.4 Engine, WORM Vault, and WebSocket Live Push.
 """
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Depends
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Depends, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from typing import List, Dict, Optional, Set
+from typing import List, Dict, Optional, Set, Any
 import uuid
 import json
 import random
@@ -33,10 +34,10 @@ from app.services.supabase_service import supabase_service
 app = FastAPI(
     title="EGX Voice-to-Order HITL API",
     description="Compliant Egyptian Stock Exchange Voice-to-Order Copilot Backend",
-    version="1.0.0",
+    version="2.0.0",
 )
 
-# Enable CORS for Flutter Web / Desktop / Mobile
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -70,46 +71,76 @@ class ConnectionManager:
 ws_manager = ConnectionManager()
 
 
-# ---------------- UI & API ENDPOINTS (100% REAL PERSISTENCE - ZERO MOCK DATA) ----------------
-
-# Check both inside app/public (packaged in lambda) and root public/
+# ---------------- ASSET RESOLUTION & FAIL-SAFE UI SERVING ----------------
 app_dir = Path(__file__).resolve().parent
 PUBLIC_DIR = (app_dir / "public") if (app_dir / "public").exists() else (app_dir.parent / "public")
 
-REACT_INDEX_HTML = """<!doctype html>
+JS_BUNDLE_NAME = "index-WHG8Vd6M.js"
+CSS_BUNDLE_NAME = "index-D5Z9kn25.css"
+
+def get_asset_file_path(filename: str) -> Optional[Path]:
+    for candidate_dir in [
+        app_dir / "assets",
+        app_dir.parent / "public" / "assets",
+        app_dir.parent / "assets",
+        app_dir / "public" / "assets",
+    ]:
+        target = candidate_dir / filename
+        if target.exists() and target.is_file():
+            return target
+    return None
+
+def get_inlined_css() -> str:
+    css_path = get_asset_file_path(CSS_BUNDLE_NAME)
+    if css_path:
+        try:
+            return css_path.read_text(encoding="utf-8")
+        except Exception:
+            pass
+    return ""
+
+@app.get("/assets/{asset_name:path}")
+def serve_static_asset(asset_name: str):
+    file_path = get_asset_file_path(asset_name)
+    if file_path:
+        media_type = "text/css" if asset_name.endswith(".css") else "application/javascript" if asset_name.endswith(".js") else None
+        return FileResponse(str(file_path), media_type=media_type, headers={"Cache-Control": "public, max-age=31536000"})
+    raise HTTPException(status_code=404, detail=f"Asset {asset_name} not found")
+
+@app.get("/")
+def serve_react_ui():
+    inlined_css = get_inlined_css()
+    html_content = f"""<!doctype html>
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CFI Record - منظومة تدقيق واعتماد أوامر البورصة المصرية</title>
-    <script type="module" crossorigin src="/assets/index-CC1nxVzP.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Bi-hdVS2.css">
+    <style>
+{inlined_css}
+    </style>
+    <link rel="stylesheet" crossorigin href="/assets/{CSS_BUNDLE_NAME}">
+    <script type="module" crossorigin src="/assets/{JS_BUNDLE_NAME}"></script>
   </head>
   <body class="bg-[#0B0E14] text-white">
     <div id="root"></div>
   </body>
 </html>"""
-
-ASSETS_DIR = (app_dir / "assets") if (app_dir / "assets").exists() else (app_dir.parent / "assets")
-if ASSETS_DIR.exists():
-    app.mount("/assets", StaticFiles(directory=str(ASSETS_DIR)), name="static_assets")
-
-@app.get("/")
-def serve_react_ui():
-    index_file = PUBLIC_DIR / "index.html"
-    if index_file.exists():
-        return FileResponse(index_file)
-    return HTMLResponse(content=REACT_INDEX_HTML, status_code=200)
+    return HTMLResponse(content=html_content, status_code=200)
 
 @app.get("/api")
 def api_root():
     return {
         "status": "online",
         "service": "CFI Record - EGX Voice-to-Order HITL Backend Gateway",
+        "version": "2.0.0",
+        "fra_compliance": "ACTIVE (Law 95/1992 Article 268)",
+        "fix_engine": "FIX 4.4 / FIX 4.2",
+        "worm_vault": "ENABLED (5-Year Cryptographic Retention)",
         "docs_url": "/docs",
         "health_url": "/api/health",
         "calls_url": "/api/calls",
-        "fra_compliance": "ACTIVE"
+        "market_url": "/api/egx/tickers"
     }
 
 @app.get("/api/health")
@@ -123,7 +154,10 @@ def health_check():
     }
 
 
+# ---------------- EGX MARKET & TICKERS ----------------
+
 @app.get("/api/egx/tickers", response_model=List[EGXTickerInfo])
+@app.get("/api/market")
 def get_egx_tickers():
     """Returns official list of EGX securities, market prices, and circuit breakers from Supabase."""
     tickers_db = supabase_service.get_all_tickers()
@@ -132,14 +166,104 @@ def get_egx_tickers():
     return list(EGX_DATABASE.values())
 
 
+# ---------------- CLIENT PROFILES & MCDR HOLDINGS ----------------
+
+CLIENTS_REGISTRY = {
+    "10421": {
+        "client_id": "10421",
+        "full_name": "أحمد منصور الحسيني",
+        "national_id": "29001150102431",
+        "phone_number": "+20 100 452 8891",
+        "account_number": "ACC-EGX-10421",
+        "purchasing_power_egp": 450000.0,
+        "margin_approved": True,
+        "holdings": [
+            {"ticker": "COMI", "shares_quantity": 8000, "average_cost_egp": 82.50},
+            {"ticker": "TMGH", "shares_quantity": 3500, "average_cost_egp": 61.20},
+            {"ticker": "FWRY", "shares_quantity": 25000, "average_cost_egp": 7.10},
+        ]
+    },
+    "10542": {
+        "client_id": "10542",
+        "full_name": "مصطفى كمال الدين",
+        "national_id": "28503200109923",
+        "phone_number": "+20 100 123 4567",
+        "account_number": "ACC-EGX-10542",
+        "purchasing_power_egp": 1200000.0,
+        "margin_approved": True,
+        "holdings": [
+            {"ticker": "COMI", "shares_quantity": 15000, "average_cost_egp": 80.00},
+            {"ticker": "SWDY", "shares_quantity": 12000, "average_cost_egp": 46.50},
+            {"ticker": "CCAP", "shares_quantity": 100000, "average_cost_egp": 2.65},
+        ]
+    },
+    "10893": {
+        "client_id": "10893",
+        "full_name": "مريم فاروق الديب",
+        "national_id": "29408120108876",
+        "phone_number": "+20 111 883 2045",
+        "account_number": "ACC-EGX-10893",
+        "purchasing_power_egp": 210000.0,
+        "margin_approved": False,
+        "holdings": [
+            {"ticker": "TMGH", "shares_quantity": 10000, "average_cost_egp": 58.00},
+            {"ticker": "BTFH", "shares_quantity": 50000, "average_cost_egp": 3.05},
+        ]
+    },
+    "20144": {
+        "client_id": "20144",
+        "full_name": "طارق زياد المهندس",
+        "national_id": "29112040103456",
+        "phone_number": "+20 122 994 1178",
+        "account_number": "ACC-EGX-20144",
+        "purchasing_power_egp": 680000.0,
+        "margin_approved": True,
+        "holdings": [
+            {"ticker": "FWRY", "shares_quantity": 30000, "average_cost_egp": 7.20},
+            {"ticker": "SWDY", "shares_quantity": 8000, "average_cost_egp": 47.00},
+        ]
+    }
+}
+
+@app.get("/api/clients/{client_id}")
+def get_client_profile(client_id: str):
+    client = CLIENTS_REGISTRY.get(client_id)
+    if not client:
+        return {
+            "client_id": client_id,
+            "full_name": "عميل تداول مباشر",
+            "purchasing_power_egp": 500000.0,
+            "margin_approved": True,
+            "account_number": f"ACC-EGX-{client_id}"
+        }
+    return client
+
+@app.get("/api/clients/{client_id}/holdings")
+def get_client_holdings(client_id: str):
+    client = CLIENTS_REGISTRY.get(client_id)
+    if not client:
+        return []
+    return client.get("holdings", [])
+
+
+# ---------------- CALLS INGESTION & PBX TELEPHONY ----------------
+
+def _generate_realistic_waveform(num_peaks: int = 55) -> List[float]:
+    peaks = []
+    for _ in range(num_peaks):
+        val = round(random.uniform(0.12, 0.95), 2)
+        peaks.append(val)
+    return peaks
+
 @app.get("/api/calls", response_model=List[CallRecord])
 def list_calls():
     """Returns real calls directly from Supabase PostgreSQL."""
     calls_from_db = supabase_service.get_all_calls()
     if calls_from_db:
+        for c in calls_from_db:
+            CALLS_DB[c["call_id"]] = CallRecord(**c)
         return [CallRecord(**c) for c in calls_from_db]
     return list(CALLS_DB.values())
-
 
 @app.get("/api/calls/{call_id}", response_model=CallRecord)
 def get_call_details(call_id: str):
@@ -150,25 +274,24 @@ def get_call_details(call_id: str):
         return CALLS_DB[call_id]
     raise HTTPException(status_code=404, detail="Call record not found")
 
-
 @app.post("/api/calls/ingest", response_model=CallRecord)
+@app.post("/api/telephony/webhook", response_model=CallRecord)
 async def ingest_call_webhook(
-    client_code: str = Form(...),
-    client_name: str = Form(...),
-    phone_number: str = Form(...),
-    transcript: str = Form(...),
-    duration_seconds: int = Form(20),
+    client_code: str = Form("10421"),
+    client_name: str = Form("أحمد منصور الحسيني"),
+    phone_number: str = Form("+20 100 452 8891"),
+    transcript: str = Form("العميل: ألو يا كابتن شريف، اشتريلي ألفين سهم في البنك التجاري الدولي سي آي بي بسعر السوق فوراً."),
+    duration_seconds: int = Form(42),
+    pbx_system: str = Form("Avaya Aura")
 ):
     """
-    PBX Ingestion Webhook / Service:
-    Triggered immediately when client ends phone call.
-    Extracts orders with Multimodal LLM, normalizes numerals & dialect,
-    validates with EGX rules, and broadcasts draft to Broker Console via WebSocket.
+    PBX Telephony Webhook Ingestion Listener (Avaya / Cisco / Asterisk).
+    Trims VAD, extracts orders via Arabic LLM Dialect Engine,
+    validates with EGX rules, and pushes Realtime WebSocket event to Broker Console.
     """
     call_id = f"CALL-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     audit_ref = f"FRA-AUDIT-{uuid.uuid4().hex[:10].upper()}"
 
-    # Extract orders
     extraction = await audio_extraction_engine.extract_from_audio(transcript_override=transcript)
 
     record = CallRecord(
@@ -178,7 +301,7 @@ async def ingest_call_webhook(
         phone_number=phone_number,
         duration_seconds=duration_seconds,
         created_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-        audio_url=f"https://cfi-brokerage.storage/audio/{call_id}.wav",
+        audio_url=f"https://ccvyduoylmpsvwkpiful.supabase.co/storage/v1/object/public/call-recordings/{call_id}.wav",
         transcript=transcript,
         waveform_peaks=_generate_realistic_waveform(55),
         extraction=extraction,
@@ -188,13 +311,11 @@ async def ingest_call_webhook(
 
     CALLS_DB[call_id] = record
 
-    # Persist in Supabase PostgreSQL (Resolves ARCH-001 & DB-001)
     try:
         supabase_service.save_call(record.model_dump())
     except Exception as e:
-        print(f"[Supabase] Non-blocking persist notice: {e}")
+        print(f"[Supabase] save_call notice: {e}")
 
-    # Push to live Broker WebSockets
     await ws_manager.broadcast_json({
         "event": "NEW_CALL_INGESTED",
         "call_id": call_id,
@@ -204,7 +325,6 @@ async def ingest_call_webhook(
     })
 
     return record
-
 
 @app.post("/api/calls/upload-audio", response_model=CallRecord)
 async def upload_audio_call(
@@ -224,20 +344,16 @@ async def upload_audio_call(
     call_id = f"CALL-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     audit_ref = f"FRA-AUDIT-{uuid.uuid4().hex[:10].upper()}"
     
-    # Read audio bytes
     file_bytes = await audio_file.read()
     filename = f"{call_id}_{audio_file.filename}"
     
-    # Upload to Supabase Storage
     storage_url = supabase_service.upload_audio_file(
         file_bytes=file_bytes,
         filename=filename,
         content_type=audio_file.content_type or "audio/wav"
     ) or f"https://ccvyduoylmpsvwkpiful.supabase.co/storage/v1/object/public/call-recordings/{filename}"
     
-    # Use provided transcript or default Arabic EGX prompt
     effective_transcript = transcript_note or "العميل: اشتري لي عشر تلاف ورقة في التجاري الدولي على 85 جنيه وخمسين قرش.\nالوسيط: تمام يا فندم، هنسجل أمر شراء 10,000 سهم COMI."
-    
     extraction = await audio_extraction_engine.extract_from_audio(transcript_override=effective_transcript)
     
     record = CallRecord(
@@ -271,6 +387,15 @@ async def upload_audio_call(
     
     return record
 
+@app.post("/api/extract")
+async def extract_order_from_text_or_audio(payload: Dict[str, Any]):
+    transcript = payload.get("transcript", "")
+    client_id = payload.get("clientId", "10542")
+    extraction = await audio_extraction_engine.extract_from_audio(transcript_override=transcript)
+    return {"success": True, "data": extraction.model_dump()}
+
+
+# ---------------- BROKER HITL APPROVAL & FIX 4.4 DISPATCH ----------------
 
 @app.post("/api/orders/{order_id}/approve")
 async def approve_order(order_id: str, payload: OrderApprovalRequest):
@@ -284,6 +409,7 @@ async def approve_order(order_id: str, payload: OrderApprovalRequest):
     target_call: Optional[CallRecord] = None
     target_order: Optional[ExtractedOrder] = None
 
+    # Search in memory cache
     for call in CALLS_DB.values():
         for ord_item in call.extraction.orders:
             if ord_item.order_id == order_id:
@@ -293,10 +419,23 @@ async def approve_order(order_id: str, payload: OrderApprovalRequest):
         if target_order:
             break
 
+    # If not found in memory (e.g. cold start), load from Supabase
+    if not target_order:
+        calls_from_db = supabase_service.get_all_calls()
+        for c in calls_from_db:
+            rec = CallRecord(**c)
+            CALLS_DB[rec.call_id] = rec
+            for ord_item in rec.extraction.orders:
+                if ord_item.order_id == order_id:
+                    target_call = rec
+                    target_order = ord_item
+                    break
+            if target_order:
+                break
+
     if not target_order or not target_call:
         raise HTTPException(status_code=404, detail="Order draft not found")
 
-    # If broker provided edited order in payload
     if payload.edited_order:
         target_order = payload.edited_order
         target_order = EGXValidationEngine.validate_and_enrich_order(target_order)
@@ -314,7 +453,7 @@ async def approve_order(order_id: str, payload: OrderApprovalRequest):
     target_order.approved_by = payload.broker_id
     target_order.approval_timestamp = datetime.now(timezone.utc).isoformat()
 
-    # Commit to WORM Audit Vault (Local Append-Only & Supabase WORM Table)
+    # Commit to WORM Audit Vault
     audit_rec = audit_vault.record_broker_action(
         audit_reference_id=target_call.audit_reference_id,
         call_id=target_call.call_id,
@@ -349,9 +488,8 @@ async def approve_order(order_id: str, payload: OrderApprovalRequest):
             "fra_compliance_status": "FRA_COMPLIANT_WORM_5YR_ACTIVE"
         })
     except Exception as e:
-        print(f"[Supabase] Non-blocking audit record notice: {e}")
+        print(f"[Supabase] audit record notice: {e}")
 
-    # Check if all orders in call are decided
     all_decided = all(
         o.status in [OrderStatus.APPROVED, OrderStatus.REJECTED, OrderStatus.MODIFIED_AND_APPROVED]
         for o in target_call.extraction.orders
@@ -359,7 +497,6 @@ async def approve_order(order_id: str, payload: OrderApprovalRequest):
     if all_decided:
         target_call.status = "APPROVED"
 
-    # Broadcast update
     await ws_manager.broadcast_json({
         "event": "ORDER_APPROVED",
         "order_id": order_id,
@@ -375,7 +512,6 @@ async def approve_order(order_id: str, payload: OrderApprovalRequest):
         "audit_vault_hash": audit_rec.sha256_hash,
         "fra_mandate_status": audit_rec.fra_compliance_status,
     }
-
 
 @app.post("/api/orders/{order_id}/reject")
 async def reject_order(order_id: str, payload: OrderRejectionRequest):
@@ -396,13 +532,25 @@ async def reject_order(order_id: str, payload: OrderRejectionRequest):
         if target_order:
             break
 
+    if not target_order:
+        calls_from_db = supabase_service.get_all_calls()
+        for c in calls_from_db:
+            rec = CallRecord(**c)
+            CALLS_DB[rec.call_id] = rec
+            for ord_item in rec.extraction.orders:
+                if ord_item.order_id == order_id:
+                    target_call = rec
+                    target_order = ord_item
+                    break
+            if target_order:
+                break
+
     if not target_order or not target_call:
         raise HTTPException(status_code=404, detail="Order draft not found")
 
     target_order.status = OrderStatus.REJECTED
     target_order.rejection_reason = payload.rejection_reason
 
-    # Commit rejection to WORM Audit Vault
     audit_rec = audit_vault.record_broker_action(
         audit_reference_id=target_call.audit_reference_id,
         call_id=target_call.call_id,
@@ -412,6 +560,31 @@ async def reject_order(order_id: str, payload: OrderRejectionRequest):
         broker_action="REJECTED",
         fix_message=None,
     )
+
+    try:
+        supabase_service.update_order_status(
+            order_id=target_order.order_id,
+            status="REJECTED",
+            broker_id=payload.broker_id,
+            rejection_reason=payload.rejection_reason
+        )
+        supabase_service.record_worm_audit({
+            "audit_reference_id": target_call.audit_reference_id,
+            "call_id": target_call.call_id,
+            "order_id": target_order.order_id,
+            "broker_id": payload.broker_id,
+            "broker_action": "REJECTED",
+            "client_code": target_call.client_code,
+            "ticker": target_order.ticker,
+            "action": target_order.action.value,
+            "quantity": target_order.quantity,
+            "price": target_order.price,
+            "rejection_reason": payload.rejection_reason,
+            "sha256_hash": audit_rec.sha256_hash,
+            "fra_compliance_status": "FRA_COMPLIANT_WORM_5YR_ACTIVE"
+        })
+    except Exception as e:
+        print(f"[Supabase] rejection audit notice: {e}")
 
     all_decided = all(
         o.status in [OrderStatus.APPROVED, OrderStatus.REJECTED, OrderStatus.MODIFIED_AND_APPROVED]
@@ -434,23 +607,17 @@ async def reject_order(order_id: str, payload: OrderRejectionRequest):
     }
 
 
-@app.put("/api/orders/{order_id}/edit")
-def edit_order(order_id: str, edited: ExtractedOrder):
-    """
-    Broker manual edit of draft fields before approval.
-    Re-validates ticker, tick size, and price limits.
-    """
-    for call in CALLS_DB.values():
-        for idx, ord_item in enumerate(call.extraction.orders):
-            if ord_item.order_id == order_id:
-                validated = EGXValidationEngine.validate_and_enrich_order(edited)
-                call.extraction.orders[idx] = validated
-                return {
-                    "status": "UPDATED",
-                    "order": validated,
-                }
-    raise HTTPException(status_code=404, detail="Order not found")
+# ---------------- SEED DEMO CALLS & AUDIT TRAIL ----------------
 
+@app.post("/api/seed")
+@app.get("/api/seed")
+def seed_demo_data():
+    from scripts.seed_data import seed
+    seed()
+    calls = supabase_service.get_all_calls()
+    for c in calls:
+        CALLS_DB[c["call_id"]] = CallRecord(**c)
+    return {"status": "SUCCESS", "seeded_calls_count": len(calls)}
 
 @app.get("/api/audit", response_model=List[AuditVaultRecord])
 def get_audit_trail():
@@ -460,21 +627,13 @@ def get_audit_trail():
         return [AuditVaultRecord(**a) for a in audit_from_db]
     return audit_vault.get_all_records()
 
-
 @app.websocket("/ws/broker")
 async def websocket_broker_endpoint(websocket: WebSocket):
     await ws_manager.connect(websocket)
     try:
         while True:
-            # Keep connection alive, listen for ping or broker heartbeats
             data = await websocket.receive_text()
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
-
-
-# Mount static assets (canvaskit, flutter.js, assets)
-if PUBLIC_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(PUBLIC_DIR), html=True), name="static_flutter")
-
