@@ -3,6 +3,7 @@ FastAPI Server for EGX Voice-to-Order HITL Console.
 Provides REST Endpoints and WebSocket live push.
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Depends
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from typing import List, Dict, Optional, Set
@@ -69,7 +70,16 @@ class ConnectionManager:
 ws_manager = ConnectionManager()
 
 
-# ---------------- API ENDPOINTS (100% REAL PERSISTENCE - ZERO MOCK DATA) ----------------
+# ---------------- UI & API ENDPOINTS (100% REAL PERSISTENCE - ZERO MOCK DATA) ----------------
+
+PUBLIC_DIR = Path(__file__).resolve().parent.parent / "public"
+
+@app.get("/")
+def serve_flutter_ui():
+    index_file = PUBLIC_DIR / "index.html"
+    if index_file.exists():
+        return FileResponse(index_file)
+    return HTMLResponse("<h1>CFI Record Broker Console Loading...</h1>")
 
 @app.get("/api")
 def api_root():
@@ -376,3 +386,9 @@ async def websocket_broker_endpoint(websocket: WebSocket):
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
         ws_manager.disconnect(websocket)
+
+
+# Mount static assets (canvaskit, flutter.js, assets)
+if PUBLIC_DIR.exists():
+    app.mount("/", StaticFiles(directory=str(PUBLIC_DIR), html=True), name="static_flutter")
+
