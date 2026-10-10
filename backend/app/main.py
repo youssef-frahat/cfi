@@ -82,8 +82,8 @@ REACT_INDEX_HTML = """<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CFI Record - منظومة تدقيق واعتماد أوامر البورصة المصرية</title>
-    <script type="module" crossorigin src="/assets/index-BVdXDFFw.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-DcV417yn.css">
+    <script type="module" crossorigin src="/assets/index-CC1nxVzP.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Bi-hdVS2.css">
   </head>
   <body class="bg-[#0B0E14] text-white">
     <div id="root"></div>
