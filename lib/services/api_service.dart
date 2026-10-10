@@ -6,8 +6,9 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/call_models.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://127.0.0.1:8000/api';
-  static const String wsUrl = 'ws://127.0.0.1:8000/ws/broker';
+  // Production live Vercel deployment URL
+  static const String baseUrl = 'https://cfi-six.vercel.app/api';
+  static const String wsUrl = 'wss://cfi-six.vercel.app/ws/broker';
 
   WebSocketChannel? _channel;
   StreamController<Map<String, dynamic>>? _wsStreamController;

@@ -13,5 +13,6 @@ void main() {
 
     await tester.pumpWidget(const CFIReportApp());
     expect(find.byType(CFIReportApp), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 100));
   });
 }

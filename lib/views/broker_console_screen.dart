@@ -615,9 +615,12 @@ class _MarketWatchPanel extends StatelessWidget {
               children: [
                 Icon(Icons.show_chart, color: Color(0xFF00E676), size: 18),
                 SizedBox(width: 8),
-                Text(
-                  'أسعار البورصة المصرية اللحظية (EGX30)',
-                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                Expanded(
+                  child: Text(
+                    'أسعار البورصة المصرية اللحظية (EGX30)',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             ),
@@ -690,9 +693,12 @@ class _MarketWatchPanel extends StatelessWidget {
                   children: [
                     Icon(Icons.router, size: 14, color: Color(0xFF00E676)),
                     SizedBox(width: 6),
-                    Text(
-                      'بوابة OMS FIX Gateway: متصلة (PORT 9800)',
-                      style: TextStyle(color: Color(0xFF00E676), fontSize: 11, fontWeight: FontWeight.bold),
+                    Expanded(
+                      child: Text(
+                        'بوابة OMS FIX Gateway: متصلة (PORT 9800)',
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: Color(0xFF00E676), fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ],
                 ),
