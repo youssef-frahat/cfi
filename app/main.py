@@ -72,7 +72,9 @@ ws_manager = ConnectionManager()
 
 # ---------------- UI & API ENDPOINTS (100% REAL PERSISTENCE - ZERO MOCK DATA) ----------------
 
-PUBLIC_DIR = Path(__file__).resolve().parent.parent / "public"
+# Check both inside app/public (packaged in lambda) and root public/
+app_dir = Path(__file__).resolve().parent
+PUBLIC_DIR = (app_dir / "public") if (app_dir / "public").exists() else (app_dir.parent / "public")
 
 @app.get("/")
 def serve_flutter_ui():
