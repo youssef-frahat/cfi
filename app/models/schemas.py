@@ -1,5 +1,5 @@
 """
-Pydantic Models and Schemas for EGX Voice-to-Order HITL System.
+Pydantic Models and Schemas for EGX Voice-to-Order HITL & Post-Trade Reconciliation System.
 Compliant with FRA Regulations & EGX Trading Rules.
 """
 from typing import List, Optional, Dict, Any
@@ -125,4 +125,58 @@ class AuditVaultRecord(BaseModel):
     price: Optional[float]
     sha256_hash: str
     fra_compliance_status: str
-    fix_message: Optional[str]
+    fix_message: Optional[str] = None
+
+# ==============================================================
+# POST-TRADE RECONCILIATION & AUDIT SCHEMAS
+# ==============================================================
+
+class ExecutedTrade(BaseModel):
+    trade_id: str
+    ticker: str
+    action: str
+    executed_quantity: int
+    executed_price: float
+    execution_time: str
+    executing_broker: str
+    trade_value_egp: float
+    oms_status: str = "FILLED"
+
+class ReconciliationStatus(str, Enum):
+    MATCHED = "MATCHED"
+    PRICE_MISMATCH = "PRICE_MISMATCH"
+    QUANTITY_MISMATCH = "QUANTITY_MISMATCH"
+    TICKER_MISMATCH = "TICKER_MISMATCH"
+    SIDE_MISMATCH = "SIDE_MISMATCH"
+    UNEXECUTED = "UNEXECUTED"
+    UNAUTHORIZED = "UNAUTHORIZED"
+
+class TradeReconciliationCase(BaseModel):
+    case_id: str
+    client_code: str
+    client_name: str
+    phone_number: str
+    call_id: str
+    call_duration_seconds: int
+    call_created_at: str
+    audio_url: str
+    transcript: str
+    waveform_peaks: List[float] = Field(default_factory=list)
+    audit_reference_id: str
+    voice_ticker: str
+    voice_action: str
+    voice_quantity: int
+    voice_order_type: str
+    voice_price: Optional[float] = None
+    voice_timestamp_range: str = "00:05 - 00:20"
+    executed_trade: Optional[ExecutedTrade] = None
+    reconciliation_status: str = "MATCHED"
+    is_compliant: bool = True
+    status_title_ar: str
+    status_badge_color: str = "emerald"
+    discrepancy_reasons: List[str] = Field(default_factory=list)
+    financial_variance_egp: float = 0.0
+    compliance_verdict_ar: str
+    certified_by: Optional[str] = None
+    certified_at: Optional[str] = None
+    sha256_audit_hash: str

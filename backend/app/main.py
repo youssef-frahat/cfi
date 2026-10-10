@@ -24,12 +24,15 @@ from app.models.schemas import (
     EGXTickerInfo,
     AuditVaultRecord,
     ValidationStatus,
+    TradeReconciliationCase,
+    ExecutedTrade,
 )
 from app.services.egx_validator import EGXValidationEngine, EGX_DATABASE
 from app.services.audio_extractor import audio_extraction_engine
 from app.services.fix_service import FIXProtocolEngine
 from app.services.audit_vault import audit_vault
 from app.services.supabase_service import supabase_service
+from app.services.reconciliation_service import reconciliation_service
 
 app = FastAPI(
     title="EGX Voice-to-Order HITL API",
@@ -75,8 +78,8 @@ ws_manager = ConnectionManager()
 app_dir = Path(__file__).resolve().parent
 PUBLIC_DIR = (app_dir / "public") if (app_dir / "public").exists() else (app_dir.parent / "public")
 
-JS_BUNDLE_NAME = "index-WHG8Vd6M.js"
-CSS_BUNDLE_NAME = "index-D5Z9kn25.css"
+JS_BUNDLE_NAME = "index-CmVcwC4l.js"
+CSS_BUNDLE_NAME = "index-DAPphBiA.css"
 
 def get_asset_file_path(filename: str) -> Optional[Path]:
     for candidate_dir in [
@@ -604,6 +607,52 @@ async def reject_order(order_id: str, payload: OrderRejectionRequest):
         "message": "تم رفض مسودة الأمر وتسجيل سبب الرفض في سجل الرقابة المالية",
         "order": target_order,
         "audit_vault_hash": audit_rec.sha256_hash,
+    }
+
+
+# ---------------- VOICE VS TRADE RECONCILIATION & SURVEILLANCE ----------------
+
+@app.get("/api/reconciliation/cases", response_model=List[TradeReconciliationCase])
+def get_reconciliation_cases():
+    """Returns all Post-Trade Voice vs Execution Audit Cases."""
+    return reconciliation_service.get_all_cases()
+
+@app.get("/api/reconciliation/cases/{case_id}", response_model=TradeReconciliationCase)
+def get_reconciliation_case(case_id: str):
+    case = reconciliation_service.get_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Reconciliation case not found")
+    return case
+
+@app.get("/api/reconciliation/summary")
+def get_reconciliation_summary():
+    """Returns aggregate audit statistics and total financial exposure."""
+    return reconciliation_service.get_summary_statistics()
+
+@app.post("/api/reconciliation/{case_id}/certify")
+def certify_trade_execution(case_id: str, payload: Dict[str, Any]):
+    auditor_id = payload.get("auditor_id", "AUDITOR_COMPLIANCE_HEAD")
+    notes = payload.get("notes")
+    certified = reconciliation_service.certify_case(case_id, auditor_id, notes)
+    if not certified:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return {
+        "status": "SUCCESS",
+        "message": "تم اعتماد صحة مطابقة تنفيذ الصفقة بنجاح وتوثيقها بسجل الرقابة",
+        "case": certified
+    }
+
+@app.post("/api/reconciliation/{case_id}/dispute")
+def escalate_trade_dispute(case_id: str, payload: Dict[str, Any]):
+    auditor_id = payload.get("auditor_id", "AUDITOR_COMPLIANCE_HEAD")
+    reason = payload.get("reason", "مخالفة شروط تفويض العميل في السعر أو الكمية")
+    escalated = reconciliation_service.escalate_dispute(case_id, auditor_id, reason)
+    if not escalated:
+        raise HTTPException(status_code=404, detail="Case not found")
+    return {
+        "status": "ESCALATED",
+        "message": "تم تسجيل نزاع العميل وإحالة الصفقة للتحقيق والتعويض",
+        "case": escalated
     }
 
 
