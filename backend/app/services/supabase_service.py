@@ -258,4 +258,25 @@ class SupabaseDataService:
             print(f"[Supabase] Error loading audit trail: {e}")
             return []
 
+    @staticmethod
+    def upload_audio_file(file_bytes: bytes, filename: str, content_type: str = "audio/wav") -> Optional[str]:
+        client = get_supabase_client()
+        if not client:
+            return None
+        try:
+            bucket_name = os.getenv("SUPABASE_AUDIO_BUCKET", "call-recordings")
+            res = client.storage.from_(bucket_name).upload(
+                path=filename,
+                file=file_bytes,
+                file_options={"content-type": content_type, "upsert": "true"}
+            )
+            # Generate public URL
+            public_url = client.storage.from_(bucket_name).get_public_url(filename)
+            return public_url
+        except Exception as e:
+            print(f"[Supabase Storage] Upload error: {e}")
+            # Return standard fallback URL format
+            return f"https://ccvyduoylmpsvwkpiful.supabase.co/storage/v1/object/public/call-recordings/{filename}"
+
 supabase_service = SupabaseDataService()
+

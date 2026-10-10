@@ -8,11 +8,12 @@ import {
   Pause, 
   FileText, 
   Activity, 
-  RefreshCw,
-  Clock,
-  ArrowUpRight,
-  ArrowDownRight,
-  Lock
+  RefreshCw, 
+  Clock, 
+  ArrowUpRight, 
+  ArrowDownRight, 
+  Lock,
+  Upload
 } from 'lucide-react';
 
 interface ExtractedOrder {
@@ -161,6 +162,36 @@ export default function App() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('audio_file', file);
+    formData.append('client_code', '10542');
+    formData.append('client_name', 'مستثمر تداول مباشر');
+    formData.append('phone_number', '+20 100 123 4567');
+
+    try {
+      setActionNotice('جاري رفع التسجيل الصوتي إلى Supabase Storage وتحليله بالذكاء الاصطناعي...');
+      const res = await fetch(`${API_BASE}/calls/upload-audio`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (res.ok) {
+        const newCall = await res.json();
+        setActionNotice(`تم رفع التسجيل الصوتي بنجاح إلى Supabase Storage وتوليد مسودة أمر.`);
+        fetchData();
+        setSelectedCall(newCall);
+      } else {
+        setActionNotice('فشل رفع الملف الصوتي. يرجى المحاولة مجدداً.');
+      }
+    } catch (err) {
+      console.error(err);
+      setActionNotice('حدث خطأ أثناء رفع المكالمة الصوتية.');
+    }
+  };
+
   const loadAuditVault = async () => {
     try {
       const res = await fetch(`${API_BASE}/audit`);
@@ -192,6 +223,18 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-4 text-xs">
+          {/* File Upload Button for Supabase Storage */}
+          <label className="flex items-center gap-2 px-3 py-1.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-pointer transition">
+            <Upload className="w-4 h-4" />
+            <span>رفع مكالمة صوتية (.wav / .mp3)</span>
+            <input 
+              type="file" 
+              accept="audio/*" 
+              className="hidden" 
+              onChange={handleFileUpload} 
+            />
+          </label>
+
           <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-[#1A2030] border border-[#262F47]">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
             <span className="text-gray-300">الوسيط المرخص:</span>
