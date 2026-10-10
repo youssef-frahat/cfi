@@ -8,7 +8,7 @@ sys.path.insert(0, str(root_dir))
 sys.path.insert(0, str(root_dir / "backend"))
 
 try:
-    from backend.app.main import app
+    from app.main import app
 except Exception as e:
     import traceback
     from fastapi import FastAPI

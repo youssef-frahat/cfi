@@ -71,8 +71,8 @@ ws_manager = ConnectionManager()
 
 # ---------------- API ENDPOINTS (100% REAL PERSISTENCE - ZERO MOCK DATA) ----------------
 
-@app.get("/")
-def root():
+@app.get("/api")
+def api_root():
     return {
         "status": "online",
         "service": "CFI Record - EGX Voice-to-Order HITL Backend Gateway",
