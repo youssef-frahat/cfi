@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional
 from pathlib import Path
 
-from backend.app.models.schemas import AuditVaultRecord, ExtractedOrder
+from app.models.schemas import AuditVaultRecord, ExtractedOrder
 
 AUDIT_DIR = Path("/tmp/cfi_data") if os.environ.get("VERCEL") else (Path(__file__).resolve().parent.parent / "data")
 AUDIT_LOG_FILE = AUDIT_DIR / "audit_vault_worm.jsonl"

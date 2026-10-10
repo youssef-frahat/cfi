@@ -10,7 +10,7 @@ import uuid
 from typing import Dict, Any, List, Optional
 import httpx
 
-from backend.app.models.schemas import (
+from app.models.schemas import (
     CallClassification,
     ActionType,
     OrderType,
@@ -18,7 +18,7 @@ from backend.app.models.schemas import (
     ExtractedOrder,
     ExtractionResponse,
 )
-from backend.app.services.egx_validator import EGXValidationEngine
+from app.services.egx_validator import EGXValidationEngine
 
 # Exact Production System Prompt from Specification
 EGX_SYSTEM_PROMPT = """# ROLE & OBJECTIVE

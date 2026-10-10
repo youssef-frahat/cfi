@@ -9,11 +9,11 @@ import sys
 # Ensure backend package is in python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from backend.app.services.audio_extractor import audio_extraction_engine, EgyptianDialectParser
-from backend.app.services.egx_validator import EGXValidationEngine
-from backend.app.services.fix_service import FIXProtocolEngine
-from backend.app.services.audit_vault import audit_vault
-from backend.app.models.schemas import ActionType, OrderType, TimeInForce, ExtractedOrder
+from app.services.audio_extractor import audio_extraction_engine, EgyptianDialectParser
+from app.services.egx_validator import EGXValidationEngine
+from app.services.fix_service import FIXProtocolEngine
+from app.services.audit_vault import audit_vault
+from app.models.schemas import ActionType, OrderType, TimeInForce, ExtractedOrder
 
 
 def test_gherkin_acceptance_criteria_scenario():

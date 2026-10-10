@@ -8,7 +8,7 @@ Handles:
 """
 from typing import Dict, List, Optional, Tuple
 import math
-from backend.app.models.schemas import (
+from app.models.schemas import (
     EGXTickerInfo,
     ExtractedOrder,
     ValidationStatus,

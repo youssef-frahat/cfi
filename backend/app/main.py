@@ -12,7 +12,7 @@ import random
 from datetime import datetime, timezone
 from pathlib import Path
 
-from backend.app.models.schemas import (
+from app.models.schemas import (
     CallRecord,
     ExtractedOrder,
     ExtractionResponse,
@@ -23,11 +23,11 @@ from backend.app.models.schemas import (
     AuditVaultRecord,
     ValidationStatus,
 )
-from backend.app.services.egx_validator import EGXValidationEngine, EGX_DATABASE
-from backend.app.services.audio_extractor import audio_extraction_engine
-from backend.app.services.fix_service import FIXProtocolEngine
-from backend.app.services.audit_vault import audit_vault
-from backend.app.services.supabase_service import supabase_service
+from app.services.egx_validator import EGXValidationEngine, EGX_DATABASE
+from app.services.audio_extractor import audio_extraction_engine
+from app.services.fix_service import FIXProtocolEngine
+from app.services.audit_vault import audit_vault
+from app.services.supabase_service import supabase_service
 
 app = FastAPI(
     title="EGX Voice-to-Order HITL API",
@@ -69,107 +69,7 @@ class ConnectionManager:
 ws_manager = ConnectionManager()
 
 
-def _generate_realistic_waveform(count: int = 60) -> List[float]:
-    """Generates normalized audio amplitude peaks between 0.1 and 1.0 for UI waveform."""
-    peaks = []
-    for _ in range(count):
-        val = round(random.uniform(0.15, 0.95), 2)
-        peaks.append(val)
-    return peaks
-
-
-# Initialize default sample EGX calls
-def init_sample_data():
-    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-
-    # Call 1: Acceptance Criteria Scenario (COMI Buy Limit)
-    c1_extraction = audio_extraction_engine._extract_dialect_rules(
-        "اشتري لي عشر تلاف ورقة في التجاري الدولي على 85 جنيه وخمسين قرش"
-    )
-    c1_extraction = audio_extraction_engine._enrich_response(c1_extraction)
-    c1 = CallRecord(
-        call_id="CALL-20261010-001",
-        client_code="10542",
-        client_name="أحمد ممدوح عبد العزيز",
-        phone_number="+20 100 123 4567",
-        duration_seconds=18,
-        created_at=now_str,
-        audio_url="https://cfi-brokerage.storage/audio/call_001.wav",
-        transcript="العميل: صباح الخير يا فندم. اشتري لي عشر تلاف ورقة في التجاري الدولي على 85 جنيه وخمسين قرش.\nالوسيط: تمام يا فندم، هنسجل أمر شراء 10,000 سهم COMI بسعر 85.50 جنيه حاضر.",
-        waveform_peaks=_generate_realistic_waveform(50),
-        extraction=c1_extraction,
-        audit_reference_id=f"FRA-AUDIT-{uuid.uuid4().hex[:10].upper()}",
-        status="PENDING_REVIEW",
-    )
-    CALLS_DB[c1.call_id] = c1
-
-    # Call 2: Multi-Order (Sell TMGH Market + Buy FWRY)
-    c2_extraction = audio_extraction_engine._extract_dialect_rules(
-        "بيع خمس تلاف ورقة في طلعت مصطفى ماركت واشتري فوري على 7 جنيه و45 قرش"
-    )
-    c2_extraction = audio_extraction_engine._enrich_response(c2_extraction)
-    c2 = CallRecord(
-        call_id="CALL-20261010-002",
-        client_code="10988",
-        client_name="محمد محمود الشناوي",
-        phone_number="+20 112 345 6789",
-        duration_seconds=28,
-        created_at=now_str,
-        audio_url="https://cfi-brokerage.storage/audio/call_002.wav",
-        transcript="العميل: يا باشا بيع خمس تلاف ورقة في طلعت مصطفى ماركت بسعر السوق دلوقتي، واشتري بالفلوس فوري على 7 جنيه و45 قرش.\nالوسيط: تمام يا فندم، بيع 5,000 سهم TMGH بسعر السوق وشراء فوري على 7.45.",
-        waveform_peaks=_generate_realistic_waveform(65),
-        extraction=c2_extraction,
-        audit_reference_id=f"FRA-AUDIT-{uuid.uuid4().hex[:10].upper()}",
-        status="PENDING_REVIEW",
-    )
-    CALLS_DB[c2.call_id] = c2
-
-    # Call 3: Egyptian Slang Numerals (Half Million Belton)
-    c3_extraction = audio_extraction_engine._extract_dialect_rules(
-        "عايز نص مليون ورقة بلتون ليميت على 3 جنيه و15 قرش"
-    )
-    c3_extraction = audio_extraction_engine._enrich_response(c3_extraction)
-    c3 = CallRecord(
-        call_id="CALL-20261010-003",
-        client_code="11420",
-        client_name="كريم السعدني",
-        phone_number="+20 120 987 6543",
-        duration_seconds=22,
-        created_at=now_str,
-        audio_url="https://cfi-brokerage.storage/audio/call_003.wav",
-        transcript="العميل: أهلاً يا أستاذ شريف، عايز نص مليون ورقة بلتون ليميت على 3 جنيه و15 قرش في جلسة النهارده.\nالوسيط: حاضر يا أستاذ كريم، 500,000 سهم BTFH محدد على 3.15.",
-        waveform_peaks=_generate_realistic_waveform(55),
-        extraction=c3_extraction,
-        audit_reference_id=f"FRA-AUDIT-{uuid.uuid4().hex[:10].upper()}",
-        status="PENDING_REVIEW",
-    )
-    CALLS_DB[c3.call_id] = c3
-
-    # Call 4: Inquiry-Only (FR-01 Intent filter)
-    c4_extraction = audio_extraction_engine._extract_dialect_rules(
-        "هو السهم بتاع السويدي بكام؟ وشايف السهم رايح فين؟ لو نزل لـ 45 هبقى اشتري"
-    )
-    c4 = CallRecord(
-        call_id="CALL-20261010-004",
-        client_code="12055",
-        client_name="طارق الشريف",
-        phone_number="+20 101 987 1122",
-        duration_seconds=15,
-        created_at=now_str,
-        audio_url="https://cfi-brokerage.storage/audio/call_004.wav",
-        transcript="العميل: الو يا باشا، هو السهم بتاع السويدي بكام النهارده؟ وشايف السهم رايح فين؟ لو نزل لـ 45 هبقى اشتري.\nالوسيط: السويدي حالياً بـ 48.50 ومستقر، لما تقرر تنفذ كلمني.",
-        waveform_peaks=_generate_realistic_waveform(40),
-        extraction=c4_extraction,
-        audit_reference_id=f"FRA-AUDIT-{uuid.uuid4().hex[:10].upper()}",
-        status="INQUIRY",
-    )
-    CALLS_DB[c4.call_id] = c4
-
-
-init_sample_data()
-
-
-# ---------------- API ENDPOINTS ----------------
+# ---------------- API ENDPOINTS (100% REAL PERSISTENCE - ZERO MOCK DATA) ----------------
 
 @app.get("/")
 def root():
@@ -195,21 +95,30 @@ def health_check():
 
 @app.get("/api/egx/tickers", response_model=List[EGXTickerInfo])
 def get_egx_tickers():
-    """Returns official list of EGX securities, market prices, and circuit breakers."""
+    """Returns official list of EGX securities, market prices, and circuit breakers from Supabase."""
+    tickers_db = supabase_service.get_all_tickers()
+    if tickers_db:
+        return [EGXTickerInfo(**t) for t in tickers_db]
     return list(EGX_DATABASE.values())
 
 
 @app.get("/api/calls", response_model=List[CallRecord])
 def list_calls():
-    """Returns all calls with their extracted orders and status."""
+    """Returns real calls directly from Supabase PostgreSQL."""
+    calls_from_db = supabase_service.get_all_calls()
+    if calls_from_db:
+        return [CallRecord(**c) for c in calls_from_db]
     return list(CALLS_DB.values())
 
 
 @app.get("/api/calls/{call_id}", response_model=CallRecord)
 def get_call_details(call_id: str):
-    if call_id not in CALLS_DB:
-        raise HTTPException(status_code=404, detail="Call record not found")
-    return CALLS_DB[call_id]
+    call_from_db = supabase_service.get_call_by_id(call_id)
+    if call_from_db:
+        return CallRecord(**call_from_db)
+    if call_id in CALLS_DB:
+        return CALLS_DB[call_id]
+    raise HTTPException(status_code=404, detail="Call record not found")
 
 
 @app.post("/api/calls/ingest", response_model=CallRecord)
@@ -449,7 +358,10 @@ def edit_order(order_id: str, edited: ExtractedOrder):
 
 @app.get("/api/audit", response_model=List[AuditVaultRecord])
 def get_audit_trail():
-    """Returns FRA WORM compliance audit trail records."""
+    """Returns real FRA WORM compliance audit trail records directly from Supabase."""
+    audit_from_db = supabase_service.get_all_audit_records()
+    if audit_from_db:
+        return [AuditVaultRecord(**a) for a in audit_from_db]
     return audit_vault.get_all_records()
 
 
