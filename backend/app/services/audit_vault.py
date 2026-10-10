@@ -14,13 +14,16 @@ from pathlib import Path
 
 from backend.app.models.schemas import AuditVaultRecord, ExtractedOrder
 
-AUDIT_DIR = Path(__file__).resolve().parent.parent / "data"
+AUDIT_DIR = Path("/tmp/cfi_data") if os.environ.get("VERCEL") else (Path(__file__).resolve().parent.parent / "data")
 AUDIT_LOG_FILE = AUDIT_DIR / "audit_vault_worm.jsonl"
 
 
 class AuditVaultService:
     def __init__(self):
-        AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            AUDIT_DIR.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            print(f"[AuditVault] mkdir notice: {e}")
         self._in_memory_records: List[AuditVaultRecord] = []
         self._load_existing_records()
 
