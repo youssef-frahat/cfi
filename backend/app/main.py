@@ -76,12 +76,29 @@ ws_manager = ConnectionManager()
 app_dir = Path(__file__).resolve().parent
 PUBLIC_DIR = (app_dir / "public") if (app_dir / "public").exists() else (app_dir.parent / "public")
 
+FLUTTER_INDEX_HTML = """<!DOCTYPE html>
+<html>
+<head>
+  <base href="/">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="CFI Record - EGX Voice-to-Order HITL Console">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="cfi_record">
+  <title>CFI Record - شاشة اعتماد أوامر البورصة المصرية</title>
+</head>
+<body style="margin:0; background:#0B0E14;">
+  <script src="https://cdn.jsdelivr.net/gh/youssef-frahat/cfi@main/flutter_bootstrap.js" async></script>
+</body>
+</html>"""
+
 @app.get("/")
 def serve_flutter_ui():
     index_file = PUBLIC_DIR / "index.html"
     if index_file.exists():
         return FileResponse(index_file)
-    return HTMLResponse("<h1>CFI Record Broker Console Loading...</h1>")
+    return HTMLResponse(content=FLUTTER_INDEX_HTML, status_code=200)
 
 @app.get("/api")
 def api_root():
