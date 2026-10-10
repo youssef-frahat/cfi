@@ -8,7 +8,7 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/",
       "dest": "backend/app/main.py"
     },
     {
@@ -17,6 +17,10 @@
     },
     {
       "src": "/openapi.json",
+      "dest": "backend/app/main.py"
+    },
+    {
+      "src": "/api/(.*)",
       "dest": "backend/app/main.py"
     }
   ]

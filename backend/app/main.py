@@ -171,6 +171,17 @@ init_sample_data()
 
 # ---------------- API ENDPOINTS ----------------
 
+@app.get("/")
+def root():
+    return {
+        "status": "online",
+        "service": "CFI Record - EGX Voice-to-Order HITL Backend Gateway",
+        "docs_url": "/docs",
+        "health_url": "/api/health",
+        "calls_url": "/api/calls",
+        "fra_compliance": "ACTIVE"
+    }
+
 @app.get("/api/health")
 def health_check():
     return {
